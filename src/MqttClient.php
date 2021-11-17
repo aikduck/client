@@ -53,6 +53,7 @@ class MqttClient implements ClientContract
     private bool $interrupted  = false;
     private int $bytesReceived = 0;
     private int $bytesSent     = 0;
+    private bool $exitLoopAfterMsg = false;
 
     /** @var resource|null */
     protected $socket;
@@ -583,7 +584,7 @@ class MqttClient implements ClientContract
         $this->logger->debug('Starting client loop to process incoming messages and the resend queue.');
 
         $loopStartedAt = microtime(true);
-        $messageReceived = false;
+        $this->exitLoopAfterMsg = $exitAfterMsg;
 
         while (true) {
             if ($loopTimeLimit !== null && (microtime(true) - $loopStartedAt) > $loopTimeLimit) {
@@ -603,10 +604,7 @@ class MqttClient implements ClientContract
 
             // Try to parse a message from the buffer and handle it, as long as messages can be parsed.
             if (strlen($this->buffer) > 0) {
-                $this->processMessageBuffer();
-                if ($exitAfterMsg){
-                    return;
-                }               
+                $this->processMessageBuffer();               
             } elseif ($allowSleep) {
                 usleep(100000); // 100ms
             }
@@ -889,6 +887,11 @@ class MqttClient implements ClientContract
                     'exception' => $e,
                 ]);
             }
+
+            if($this->exitLoopAfterMsg){
+                $this->exitLoopAfterMsg = false;
+                $this->interrupt();
+            }           
         }
 
         $this->runMessageReceivedEventHandlers($topic, $message, $qualityOfServiceLevel, $retained);
