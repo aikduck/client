@@ -881,7 +881,7 @@ class MqttClient implements ClientContract
             }
 
             try {
-                call_user_func($subscriber->getCallback(), $topic, $message, $retained);
+                call_user_func($subscriber->getCallback(), $topic, $message, $retained, $this->exitOnMsg);
                 
                 if ($this->exitOnMsg != "" && $this->exitOnMsg == $message){
                     $this->exitOnMsg = "";
