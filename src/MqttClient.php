@@ -53,7 +53,7 @@ class MqttClient implements ClientContract
     private bool $interrupted  = false;
     private int $bytesReceived = 0;
     private int $bytesSent     = 0;
-    private bool $exitLoopAfterMsg = false;
+    private string $exitOnMsg = "";
 
     /** @var resource|null */
     protected $socket;
@@ -579,12 +579,12 @@ class MqttClient implements ClientContract
     /**
      * {@inheritDoc}
      */
-    public function loop(bool $allowSleep = true, bool $exitWhenQueuesEmpty = false, int $queueWaitLimit = null, int $loopTimeLimit = null, bool $exitAfterMsg = false): void
+    public function loop(bool $allowSleep = true, bool $exitWhenQueuesEmpty = false, int $queueWaitLimit = null, int $loopTimeLimit = null, string $exitAfterMsg = ""): void
     {
         $this->logger->debug('Starting client loop to process incoming messages and the resend queue.');
 
         $loopStartedAt = microtime(true);
-        $this->exitLoopAfterMsg = $exitAfterMsg;
+        $this->exitOnMsg = $exitAfterMsg;
 
         while (true) {
             if ($loopTimeLimit !== null && (microtime(true) - $loopStartedAt) > $loopTimeLimit) {
@@ -634,6 +634,8 @@ class MqttClient implements ClientContract
                 }
             }
         }
+
+        $this->subMsgReceived = false;
     }
 
     /**
@@ -880,18 +882,19 @@ class MqttClient implements ClientContract
 
             try {
                 call_user_func($subscriber->getCallback(), $topic, $message, $retained);
+                
+                if ($this->exitOnMsg != "" && $this->exitOnMsg == $message){
+                    $this->exitOnMsg = "";
+                    $this->interrupt();
+                }
+
             } catch (\Throwable $e) {
                 $this->logger->error('Subscriber callback threw exception for published message on topic [{topic}].', [
                     'topic' => $topic,
                     'message' => $message,
                     'exception' => $e,
                 ]);
-            }
-
-            if($this->exitLoopAfterMsg){
-                $this->exitLoopAfterMsg = false;
-                $this->interrupt();
-            }           
+            }     
         }
 
         $this->runMessageReceivedEventHandlers($topic, $message, $qualityOfServiceLevel, $retained);
